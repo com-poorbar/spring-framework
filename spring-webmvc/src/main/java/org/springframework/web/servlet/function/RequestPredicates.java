@@ -40,6 +40,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.Part;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -278,7 +279,7 @@ public abstract class RequestPredicates {
 	 * Return a {@code RequestPredicate} that tests the request's parameter of the given name
 	 * against the given predicate.
 	 * @param name the name of the parameter to test against
-	 * @param predicate predicate to test against the parameter value
+	 * @param predicate the predicate to test against the parameter value
 	 * @return a predicate that matches the given predicate against the parameter of the given name
 	 * @see ServerRequest#param(String)
 	 */
@@ -992,6 +993,16 @@ public abstract class RequestPredicates {
 		@Override
 		public MultiValueMap<String, String> params() {
 			return this.request.params();
+		}
+
+		@Override
+		public MultiValueMap<String, Part> multipartData() throws IOException, ServletException {
+			return this.request.multipartData();
+		}
+
+		@Override
+		public String pathVariable(String name) {
+			return this.request.pathVariable(name);
 		}
 
 		@Override

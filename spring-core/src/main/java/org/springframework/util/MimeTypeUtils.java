@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
@@ -193,6 +193,10 @@ public abstract class MimeTypeUtils {
 		if (!StringUtils.hasLength(mimeType)) {
 			throw new InvalidMimeTypeException(mimeType, "'mimeType' must not be empty");
 		}
+		// do not cache multipart mime types with random boundaries
+		if (mimeType.startsWith("multipart")) {
+			return parseMimeTypeInternal(mimeType);
+		}
 		return cachedMimeTypes.get(mimeType);
 	}
 
@@ -215,7 +219,7 @@ public abstract class MimeTypeUtils {
 			throw new InvalidMimeTypeException(mimeType, "does not contain subtype after '/'");
 		}
 		String type = fullType.substring(0, subIndex);
-		String subtype = fullType.substring(subIndex + 1, fullType.length());
+		String subtype = fullType.substring(subIndex + 1);
 		if (MimeType.WILDCARD_TYPE.equals(type) && !MimeType.WILDCARD_TYPE.equals(subtype)) {
 			throw new InvalidMimeTypeException(mimeType, "wildcard type is legal only in '*/*' (all mime types)");
 		}
@@ -244,7 +248,7 @@ public abstract class MimeTypeUtils {
 				int eqIndex = parameter.indexOf('=');
 				if (eqIndex >= 0) {
 					String attribute = parameter.substring(0, eqIndex).trim();
-					String value = parameter.substring(eqIndex + 1, parameter.length()).trim();
+					String value = parameter.substring(eqIndex + 1).trim();
 					parameters.put(attribute, value);
 				}
 			}
@@ -416,7 +420,7 @@ public abstract class MimeTypeUtils {
 
 		private final int maxSize;
 
-		private final ConcurrentLinkedQueue<K> queue = new ConcurrentLinkedQueue<>();
+		private final ConcurrentLinkedDeque<K> queue = new ConcurrentLinkedDeque<>();
 
 		private final ConcurrentHashMap<K, V> cache = new ConcurrentHashMap<>();
 
@@ -442,8 +446,9 @@ public abstract class MimeTypeUtils {
 				}
 				this.lock.readLock().lock();
 				try {
-					this.queue.remove(key);
-					this.queue.add(key);
+					if (this.queue.removeLastOccurrence(key)) {
+						this.queue.offer(key);
+					}
 					return cached;
 				}
 				finally {
@@ -455,8 +460,9 @@ public abstract class MimeTypeUtils {
 				// Retrying in case of concurrent reads on the same key
 				cached = this.cache.get(key);
 				if (cached  != null) {
-					this.queue.remove(key);
-					this.queue.add(key);
+					if (this.queue.removeLastOccurrence(key)) {
+						this.queue.offer(key);
+					}
 					return cached;
 				}
 				// Generate value first, to prevent size inconsistency
@@ -469,7 +475,7 @@ public abstract class MimeTypeUtils {
 						cacheSize--;
 					}
 				}
-				this.queue.add(key);
+				this.queue.offer(key);
 				this.cache.put(key, value);
 				this.size = cacheSize + 1;
 				return value;
